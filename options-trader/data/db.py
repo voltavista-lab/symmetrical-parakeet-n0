@@ -15,6 +15,20 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+class _JsonEncoder(json.JSONEncoder):
+    """Extend the default JSON encoder to handle date/datetime objects."""
+
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, (date, datetime)):
+            return obj.isoformat()
+        return super().default(obj)
+
+
+def _dumps(obj: Any) -> str:
+    """json.dumps with date-aware encoder and NaN→null coercion."""
+    return json.dumps(obj, cls=_JsonEncoder)
+
+
 class Database:
     """
     SQLite wrapper for storing screener results and simulation data.
@@ -130,7 +144,7 @@ class Database:
         with self._connect() as conn:
             cur = conn.execute(
                 "INSERT INTO screener_results (run_at, config_json, notes) VALUES (?,?,?)",
-                (datetime.utcnow().isoformat(), json.dumps(config), notes),
+                (datetime.utcnow().isoformat(), _dumps(config), notes),
             )
             return cur.lastrowid  # type: ignore[return-value]
 
@@ -159,7 +173,7 @@ class Database:
                     c.get("best_put_pop"),
                     str(c.get("ex_dividend_date", "")),
                     c.get("composite_score"),
-                    json.dumps({k: v for k, v in c.items() if not isinstance(v, (pd.DataFrame,))}),
+                    _dumps({k: v for k, v in c.items() if not isinstance(v, pd.DataFrame)}),
                 )
             )
         with self._connect() as conn:
@@ -213,7 +227,7 @@ class Database:
                     strategy,
                     start_date.isoformat(),
                     end_date.isoformat(),
-                    json.dumps(config),
+                    _dumps(config),
                     stats.get("win_rate"),
                     stats.get("total_pnl"),
                     stats.get("annualized_return"),
@@ -247,7 +261,7 @@ class Database:
                     t.get("pnl_pct"),
                     t.get("exit_reason"),
                     t.get("roll_number", 0),
-                    json.dumps({k: str(v) for k, v in t.items()}),
+                    _dumps({k: str(v) for k, v in t.items()}),
                 )
             )
         with self._connect() as conn:

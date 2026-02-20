@@ -24,7 +24,10 @@ from rich.console import Console
 from rich.table import Table
 from rich import box
 
-console = Console()
+# Use a wide fixed width when stdout is not a real TTY (e.g. Colab, pipes).
+# Rich defaults to 80 chars in non-TTY mode which causes aggressive truncation.
+_IS_TTY = sys.stdout.isatty()
+console = Console(width=None if _IS_TTY else 220)
 
 
 # ─── Config loader ────────────────────────────────────────────────────────────

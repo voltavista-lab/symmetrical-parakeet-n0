@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -13,6 +14,30 @@ import yfinance as yf
 from .base import OptionContract, OptionsDataAdapter, StockQuote
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_int(val, default: int = 0) -> int:
+    """Convert value to int, returning `default` on NaN / None / error."""
+    try:
+        if val is None:
+            return default
+        f = float(val)
+        if math.isnan(f) or math.isinf(f):
+            return default
+        return int(f)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_float(val, default: float = 0.0) -> float:
+    """Convert value to float, returning `default` on NaN / None / error."""
+    try:
+        if val is None:
+            return default
+        f = float(val)
+        return default if (math.isnan(f) or math.isinf(f)) else f
+    except (TypeError, ValueError):
+        return default
 
 
 class YFinanceAdapter(OptionsDataAdapter):
@@ -87,9 +112,9 @@ class YFinanceAdapter(OptionsDataAdapter):
             return StockQuote(
                 ticker=ticker,
                 price=price,
-                volume=int(info.get("volume", 0) or 0),
-                avg_volume=int(info.get("averageVolume", 0) or 0),
-                market_cap=float(info.get("marketCap", 0) or 0),
+                volume=_safe_int(info.get("volume")),
+                avg_volume=_safe_int(info.get("averageVolume")),
+                market_cap=_safe_float(info.get("marketCap")),
                 sector=sector,
                 industry=info.get("industry", "Unknown") or "Unknown",
                 dividend_yield=float(info.get("dividendYield", 0.0) or 0.0) * 100,  # pct
@@ -147,24 +172,24 @@ class YFinanceAdapter(OptionsDataAdapter):
 
                     for opt_type, df in [("put", chain.puts), ("call", chain.calls)]:
                         for _, row in df.iterrows():
-                            iv = float(row.get("impliedVolatility", 0.0) or 0.0)
+                            iv = _safe_float(row.get("impliedVolatility"))
                             rows.append(
                                 {
                                     "ticker": ticker,
                                     "expiration": exp_date,
                                     "dte": dte,
-                                    "strike": float(row["strike"]),
+                                    "strike": _safe_float(row.get("strike")),
                                     "option_type": opt_type,
-                                    "bid": float(row.get("bid", 0.0) or 0.0),
-                                    "ask": float(row.get("ask", 0.0) or 0.0),
-                                    "last": float(row.get("lastPrice", 0.0) or 0.0),
-                                    "volume": int(row.get("volume", 0) or 0),
-                                    "open_interest": int(row.get("openInterest", 0) or 0),
+                                    "bid": _safe_float(row.get("bid")),
+                                    "ask": _safe_float(row.get("ask")),
+                                    "last": _safe_float(row.get("lastPrice")),
+                                    "volume": _safe_int(row.get("volume")),
+                                    "open_interest": _safe_int(row.get("openInterest")),
                                     "implied_volatility": iv,
-                                    "delta": float(row.get("delta", np.nan) or np.nan),
-                                    "gamma": float(row.get("gamma", np.nan) or np.nan),
-                                    "theta": float(row.get("theta", np.nan) or np.nan),
-                                    "vega": float(row.get("vega", np.nan) or np.nan),
+                                    "delta": _safe_float(row.get("delta"), default=np.nan),
+                                    "gamma": _safe_float(row.get("gamma"), default=np.nan),
+                                    "theta": _safe_float(row.get("theta"), default=np.nan),
+                                    "vega": _safe_float(row.get("vega"), default=np.nan),
                                     "in_the_money": bool(row.get("inTheMoney", False)),
                                 }
                             )
