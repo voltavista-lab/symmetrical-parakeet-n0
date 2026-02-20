@@ -10,22 +10,34 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Generator, Optional
 
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 
 class _JsonEncoder(json.JSONEncoder):
-    """Extend the default JSON encoder to handle date/datetime objects."""
+    """Extend the default JSON encoder to handle types not supported by stdlib json."""
 
     def default(self, obj: Any) -> Any:
+        # date / datetime → ISO-8601 string
         if isinstance(obj, (date, datetime)):
             return obj.isoformat()
+        # numpy integer scalars (np.int64, np.int32, …) are NOT subclasses of int
+        if isinstance(obj, np.integer):
+            return int(obj)
+        # numpy floating scalars (np.float64, …) ARE subclasses of float in NumPy ≥1.20
+        # but handle explicitly for older NumPy versions just in case
+        if isinstance(obj, np.floating):
+            return float(obj)
+        # numpy arrays → plain list
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
         return super().default(obj)
 
 
 def _dumps(obj: Any) -> str:
-    """json.dumps with date-aware encoder and NaN→null coercion."""
+    """json.dumps with an encoder that handles date/datetime and numpy scalar types."""
     return json.dumps(obj, cls=_JsonEncoder)
 
 
