@@ -1,0 +1,156 @@
+# Options Trading Finder & Simulator Configuration
+# All strategy parameters configurable here — no code changes needed
+
+# ─────────────────────────────────────────────
+# Data Sources
+# ─────────────────────────────────────────────
+data:
+  # Primary options data provider: "yfinance" | "polygon" | "tradier"
+  options_provider: "yfinance"
+
+  # API keys (leave empty string to use yfinance fallback)
+  polygon_api_key: ""
+  tradier_api_key: ""
+  tradier_account_id: ""
+  tradier_sandbox: true          # Use sandbox when testing with Tradier
+
+  # Cache settings
+  cache_dir: ".cache"
+  options_chain_ttl_minutes: 60  # 1 hour for options chains
+  fundamentals_ttl_hours: 24     # 1 day for stock fundamentals
+  iv_history_ttl_hours: 24       # 1 day for IV history
+
+# ─────────────────────────────────────────────
+# Stock Universe
+# ─────────────────────────────────────────────
+universe:
+  # Use "watchlist" to use the tickers below, "sp500" or "russell1000"
+  mode: "watchlist"
+
+  watchlist:
+    # Dividend-paying blue chips commonly used in premium selling
+    - AAPL
+    - MSFT
+    - JNJ
+    - KO
+    - PEP
+    - PG
+    - MCD
+    - T
+    - VZ
+    - IBM
+    - CVX
+    - XOM
+    - JPM
+    - BAC
+    - WFC
+    - HD
+    - WMT
+    - TGT
+    - ABBV
+    - MRK
+    - PFE
+    - O
+    - MAIN
+    - INTC
+    - CSCO
+
+# ─────────────────────────────────────────────
+# Screener Filters
+# ─────────────────────────────────────────────
+screener:
+  # Dividend yield minimum (%)
+  min_dividend_yield: 2.0
+
+  # Stock price range (keeps capital requirements manageable)
+  min_price: 15.0
+  max_price: 200.0
+
+  # Liquidity requirements
+  min_avg_daily_volume: 500000   # shares/day
+  min_options_open_interest: 500 # near-ATM options OI
+
+  # IV Rank thresholds
+  min_ivr: 30                    # Minimum IV Rank to consider
+  sweet_spot_ivr_min: 30         # Lower bound of "sweet spot"
+  sweet_spot_ivr_max: 70         # Upper bound of "sweet spot"
+
+  # Number of top candidates to display
+  top_n: 20
+
+  # Composite score weights (must sum to 1.0)
+  score_weights:
+    ivr: 0.30
+    premium_pct: 0.25
+    dividend_yield: 0.15
+    pop: 0.20
+    liquidity: 0.10
+
+# ─────────────────────────────────────────────
+# Options Analysis Parameters
+# ─────────────────────────────────────────────
+options:
+  # Target DTE for entry
+  target_dte: 45
+  dte_window_min: 30
+  dte_window_max: 60
+
+  # Target delta for short puts / covered calls
+  short_put_delta: 0.30          # ~30 delta = ~1 standard deviation OTM
+  covered_call_delta: 0.30
+
+  # Minimum premium as % of strike to consider (monthly)
+  min_premium_pct_of_strike: 1.0
+
+  # IV vs HV spread minimum to flag as "edge" opportunity
+  min_iv_hv_spread: 5.0          # IV should be at least 5% > HV (annualized)
+
+# ─────────────────────────────────────────────
+# Simulation / Backtesting Strategy
+# ─────────────────────────────────────────────
+strategy:
+  entry:
+    target_dte: 45
+    dte_window: [30, 60]
+    delta: 0.30
+    min_ivr: 30
+
+  management:
+    # Close winners at this % of max profit (Tastytrade standard: 50%)
+    profit_target_pct: 50
+    profit_target_range: [50, 55]     # Range for optimization comparisons
+
+    # Roll trigger: position is worth roll_trigger_pct MORE than credit received
+    # e.g., sold for $1.00 credit → roll when it costs $1.60 to close (60% loss)
+    roll_trigger_pct: 60
+
+    # Hard stop: close if unrealized loss exceeds this % of buying power reduction
+    stop_loss_pct: 40
+
+    # Rolling rules
+    roll_same_strike: true             # Roll to same strike, next cycle
+    roll_max_times: 2                  # Max rolls before accepting loss
+    max_dte_in_trade: 90               # Force-close if total DTE exceeds this
+
+  sizing:
+    max_portfolio_allocation_pct: 50   # Max % of portfolio in options at once
+    max_single_position_pct: 5         # Max % in any single underlying
+    portfolio_size: 50000              # Starting capital ($)
+
+# ─────────────────────────────────────────────
+# Optimizer (Grid Search)
+# ─────────────────────────────────────────────
+optimizer:
+  profit_target_range: [40, 45, 50, 55, 60]   # % values to test
+  stop_loss_range: [30, 40, 50]                # % of BPR
+  roll_trigger_range: [50, 60, 75]             # % above credit received
+
+# ─────────────────────────────────────────────
+# Output & Display
+# ─────────────────────────────────────────────
+output:
+  export_csv: true
+  csv_dir: "exports"
+  db_path: "data/options_trader.db"
+  log_level: "INFO"           # DEBUG | INFO | WARNING | ERROR
+  log_file: "options_trader.log"
