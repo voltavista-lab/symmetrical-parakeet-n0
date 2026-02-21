@@ -23,6 +23,16 @@ except ImportError:
 
 
 POSITIONS_FILE = os.path.join(os.path.dirname(__file__), "..", "positions.json")
+OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "output")
+
+
+def _save_df_csv(df, filename: str) -> str:
+    """Save DataFrame to CSV in the output directory. Returns the file path."""
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    path = os.path.join(OUTPUT_DIR, filename)
+    df.to_csv(path, index=False)
+    print(f"  Saved: {path}")
+    return path
 
 
 def _print_table_plain(headers: list[str], rows: list[list]) -> None:
@@ -36,21 +46,25 @@ def _print_table_plain(headers: list[str], rows: list[list]) -> None:
 
 
 def _print_rich_table(title: str, headers: list[str], rows: list[list]) -> None:
-    """Print a table using Rich."""
-    console = Console()
-    table = Table(title=title)
+    """Print a table using Rich with wide output for Colab compatibility."""
+    console = Console(width=200)
+    table = Table(title=title, show_lines=True, expand=False)
     for h in headers:
-        table.add_column(h)
+        table.add_column(h, no_wrap=True)
     for row in rows:
         table.add_row(*[str(v) for v in row])
     console.print(table)
 
 
-def _display_candidates(title: str, df, top_n: int = 10) -> None:
-    """Display top N candidates as a table."""
+def _display_candidates(title: str, df, top_n: int = 10, csv_filename: str = "") -> None:
+    """Display top N candidates as a table, optionally saving full results to CSV."""
     if df.empty:
         print(f"\n{title}: No candidates found.")
         return
+
+    # Save full results to CSV if requested
+    if csv_filename:
+        _save_df_csv(df, csv_filename)
 
     cols = ["ticker", "option_type", "strike", "expiry", "dte", "mid_price",
             "delta", "implied_vol", "iv_rank", "annual_premium_yield", "composite_score"]
@@ -68,9 +82,9 @@ def _display_candidates(title: str, df, top_n: int = 10) -> None:
     if USE_RICH:
         _print_rich_table(title, headers, rows)
     else:
-        print(f"\n{'=' * 60}")
+        print(f"\n{'=' * 100}")
         print(f"  {title}")
-        print(f"{'=' * 60}")
+        print(f"{'=' * 100}")
         _print_table_plain(headers, rows)
     print()
 
@@ -100,8 +114,14 @@ def cmd_scan(args) -> None:
     puts = candidates[candidates["option_type"] == "put"]
     calls = candidates[candidates["option_type"] == "call"]
 
-    _display_candidates("Top Short Put Candidates", puts, top_n=10)
-    _display_candidates("Top Covered Call Candidates", calls, top_n=10)
+    save_csv = getattr(args, "output", "") == "csv"
+    _display_candidates("Top Short Put Candidates", puts, top_n=10,
+                        csv_filename="scan_puts.csv" if save_csv else "")
+    _display_candidates("Top Covered Call Candidates", calls, top_n=10,
+                        csv_filename="scan_calls.csv" if save_csv else "")
+    if save_csv:
+        _save_df_csv(candidates, "scan_all.csv")
+        print("\nAll results saved to output/ directory.")
 
 
 def cmd_analyze(args) -> None:
@@ -134,6 +154,14 @@ def cmd_analyze(args) -> None:
 
     puts = chain[chain["type"] == "put"].sort_values("strike", ascending=False)
     calls = chain[chain["type"] == "call"].sort_values("strike")
+
+    save_csv = getattr(args, "output", "") == "csv"
+    if save_csv:
+        if not puts.empty:
+            _save_df_csv(puts, f"analyze_{ticker}_puts.csv")
+        if not calls.empty:
+            _save_df_csv(calls, f"analyze_{ticker}_calls.csv")
+        print(f"\nAll {ticker} options saved to output/ directory.")
 
     headers = ["strike", "expiry", "dte", "bid", "ask", "mid_price", "impliedVolatility", "openInterest", "volume"]
 
@@ -217,11 +245,13 @@ def main() -> None:
     scan_parser = subparsers.add_parser("scan", help="Scan watchlist for wheel candidates")
     scan_parser.add_argument("--limit", type=int, default=0, help="Limit watchlist to N stocks")
     scan_parser.add_argument("--delay", type=float, default=1.0, help="Delay between API calls")
+    scan_parser.add_argument("--output", choices=["csv"], default="", help="Save results to CSV files in output/")
     scan_parser.set_defaults(func=cmd_scan)
 
     # analyze command
     analyze_parser = subparsers.add_parser("analyze", help="Deep dive on a single ticker")
     analyze_parser.add_argument("ticker", help="Ticker symbol")
+    analyze_parser.add_argument("--output", choices=["csv"], default="", help="Save results to CSV files in output/")
     analyze_parser.set_defaults(func=cmd_analyze)
 
     # portfolio command
